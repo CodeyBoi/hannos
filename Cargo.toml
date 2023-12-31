@@ -5,18 +5,56 @@ edition = "2021"
 
 # the profile used for `cargo build`
 [profile.dev]
-panic = "abort" # disable stack unwinding on panic
+# panic = "abort" # disable stack unwinding on panic
 
 # the profile used for `cargo build --release`
 [profile.release]
-panic = "abort" # disable stack unwinding on panic
+# panic = "abort" # disable stack unwinding on panic
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bootloader = "0.9.23"
 spin = "0.5.2"
+x86_64 = "0.14.2"
+uart_16550 = "0.2.0"
+pic8259 = "0.10.1"
+pc-keyboard = "0.5.0"
+bootloader = { version = "0.9.23", features = ["map_physical_memory"] }
 
 [dependencies.lazy_static]
 version = "1.0"
 features = ["spin_no_std"]
+
+[dependencies.crossbeam-queue]
+version = "0.3.10"
+default-features = false
+features = ["alloc"]
+
+[dependencies.conquer-once]
+version = "0.4.0"
+default-features = false
+
+[dependencies.futures-util]
+version = "0.3.30"
+default-features = false
+features = ["alloc"]
+
+[package.metadata.bootimage]
+test-args = [
+    "-device",
+    "isa-debug-exit,iobase=0xf4,iosize=0x04",
+    "-serial",
+    "stdio",
+    "-display",
+    "none",
+]
+test-success-exit-code = 33 # (0x10 << 1) | 1
+test-timeout = 300 # (in seconds)
+
+[[test]]
+name = "should_panic"
+harness = false
+
+[[test]]
+name = "stack_overflow"
+harness = false

@@ -5,6 +5,7 @@ use core::{
 
 use lazy_static::lazy_static;
 use spin::Mutex;
+use x86_64::instructions::interrupts;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,7 +52,7 @@ const HEIGHT: usize = 25;
 
 #[repr(transparent)]
 struct VGABuffer {
-    buffer: [[VGABufferEntry; WIDTH]; HEIGHT],
+    chars: [[VGABufferEntry; WIDTH]; HEIGHT],
 }
 
 pub struct VGAWriter {
@@ -79,7 +80,7 @@ impl VGAWriter {
 
                 let row = HEIGHT - 1;
                 let col = self.col;
-                let addr = addr_of_mut!(self.buffer.buffer[row][col]);
+                let addr = addr_of_mut!(self.buffer.chars[row][col]);
 
                 unsafe {
                     write_volatile(
@@ -110,8 +111,8 @@ impl VGAWriter {
     fn newline(&mut self) {
         for row in 0..HEIGHT - 1 {
             for col in 0..WIDTH {
-                let entry = self.buffer.buffer[row + 1][col];
-                self.buffer.buffer[row][col] = entry;
+                let entry = self.buffer.chars[row + 1][col];
+                self.buffer.chars[row][col] = entry;
             }
         }
 
@@ -126,7 +127,7 @@ impl VGAWriter {
         };
 
         for col in 0..WIDTH {
-            self.buffer.buffer[row][col] = blank;
+            self.buffer.chars[row][col] = blank;
         }
     }
 }
@@ -156,5 +157,53 @@ macro_rules! println {
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
-    WRITER.lock().write_fmt(args).unwrap();
+    interrupts::without_interrupts(|| WRITER.lock().write_fmt(args).unwrap());
+}
+
+#[test_case]
+fn test_print() {
+    println!("Printning to VGA buffer");
+}
+
+#[test_case]
+fn test_print_loads() {
+    for _ in 0..200 {
+        println!("Printning to VGA buffer");
+    }
+}
+
+#[cfg(test)]
+fn get_char_at(row: usize, col: usize) -> char {
+    WRITER.lock().buffer.chars[row][col].ascii_char as char
+}
+
+#[test_case]
+fn test_println() {
+    let s = "Check that this string is actually printed to the VGA buffer";
+    println!("{}", s);
+    for (i, c) in s.chars().enumerate() {
+        assert_eq!(get_char_at(HEIGHT - 2, i), c);
+    }
+}
+
+#[test_case]
+fn test_wrapping() {
+    use core::fmt::Write;
+
+    let loops = 10;
+    let s = "Repeating this string should wrap around the VGA buffer";
+    interrupts::without_interrupts(|| {
+        let mut writer = WRITER.lock();
+        writeln!(writer).unwrap();
+        for _ in 0..loops {
+            write!(writer, "{}", s).unwrap();
+        }
+        writeln!(writer).unwrap();
+        let start_row = HEIGHT - 2 - s.len() * loops / WIDTH;
+        for (i, c) in s.chars().cycle().take(s.len() * loops).enumerate() {
+            let row = start_row + i / WIDTH;
+            let col = i % WIDTH;
+            assert_eq!(writer.buffer.chars[row][col].ascii_char as char, c);
+        }
+    })
 }
