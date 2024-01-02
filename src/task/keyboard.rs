@@ -79,3 +79,16 @@ pub async fn print_keypresses() {
         }
     }
 }
+
+pub async fn process_keypresses(mut key_press_handler: impl FnMut(DecodedKey)) {
+    let mut scancodes = ScancodeStream::new();
+    let mut keyboard = Keyboard::new(layouts::Us104Key, ScancodeSet1, HandleControl::Ignore);
+
+    while let Some(scancode) = scancodes.next().await {
+        if let Ok(Some(keyevent)) = keyboard.add_byte(scancode) {
+            if let Some(key) = keyboard.process_keyevent(keyevent) {
+                key_press_handler(key);
+            }
+        }
+    }
+}

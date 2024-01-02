@@ -15,6 +15,7 @@ pub mod gdt;
 pub mod interrupts;
 pub mod memory;
 pub mod serial;
+pub mod shell;
 pub mod task;
 pub mod vgabuf;
 

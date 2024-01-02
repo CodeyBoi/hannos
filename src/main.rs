@@ -13,7 +13,8 @@ use hannos::{
     allocator,
     memory::{self, BootInfoFrameAllocator},
     println,
-    task::{executor::Executor, keyboard::print_keypresses, Task},
+    shell::Shell,
+    task::{executor::Executor, keyboard::process_keypresses, Task},
 };
 use x86_64::VirtAddr;
 
@@ -33,7 +34,10 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     test_main();
 
     let mut exec = Executor::new();
-    exec.spawn(Task::new(print_keypresses()));
+    let mut shell = Shell::new();
+    exec.spawn(Task::new(process_keypresses(move |key| {
+        shell.handle_keypress(key)
+    })));
     exec.run();
 }
 
