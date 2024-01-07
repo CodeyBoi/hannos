@@ -19,8 +19,11 @@ x86_64 = "0.14.2"
 uart_16550 = "0.2.0"
 pic8259 = "0.10.1"
 pc-keyboard = "0.5.0"
-bootloader = { version = "0.9.23", features = ["map_physical_memory"] }
 thiserror-no-std = "2.0.2"
+
+[dependencies.bootloader]
+version = "0.9.23"
+features = ["map_physical_memory"]
 
 [dependencies.lazy_static]
 version = "1.0"
@@ -40,6 +43,11 @@ version = "0.3.30"
 default-features = false
 features = ["alloc"]
 
+# [dependencies.core_io]
+# version = "0.1.20210325"
+# default-features = false
+# features = ["alloc", "collections"]
+
 [package.metadata.bootimage]
 test-args = [
     "-device",
@@ -49,6 +57,7 @@ test-args = [
     "-display",
     "none",
 ]
+run-args = ["-drive", "format=raw,file=disk"]
 test-success-exit-code = 33 # (0x10 << 1) | 1
 test-timeout = 300 # (in seconds)
 

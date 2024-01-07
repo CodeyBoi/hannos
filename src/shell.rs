@@ -5,7 +5,7 @@ use alloc::{
 use pc_keyboard::DecodedKey;
 use thiserror_no_std::Error;
 
-use crate::{print, println};
+use crate::{print, println, vgabuf::flush};
 
 pub struct Shell {
     buffer: Vec<char>,
@@ -59,6 +59,7 @@ impl Shell {
 
     fn render_input_line(&self) {
         print!("\r> {} ", self.buffer.iter().collect::<String>());
+        flush();
     }
 
     fn replace_buffer_with_past_command(&mut self) {
@@ -127,9 +128,9 @@ impl Shell {
             }
             "help" => {
                 println!("Available commands:");
-                println!("  echo");
-                println!("  help");
-                println!("  clear");
+                println!("\techo");
+                println!("\thelp");
+                println!("\tclear");
             }
             "clear" => {
                 for _ in 0..100 {

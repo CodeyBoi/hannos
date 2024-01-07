@@ -11,6 +11,7 @@ use bootloader::{entry_point, BootInfo};
 extern crate alloc;
 
 pub mod allocator;
+pub mod fs;
 pub mod gdt;
 pub mod interrupts;
 pub mod memory;

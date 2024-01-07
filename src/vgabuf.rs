@@ -56,7 +56,8 @@ pub struct VGAWriter {
     row: usize,
     col: usize,
     color: VGAColor,
-    vga_buffer: &'static mut VGABuffer,
+    buffer: VGABuffer,
+    output: &'static mut VGABuffer,
 }
 
 impl VGAWriter {
@@ -65,7 +66,13 @@ impl VGAWriter {
             row: HEIGHT - 1,
             col: 0,
             color: VGAColor::new(Color::White, Color::Black),
-            vga_buffer: unsafe { &mut *(BUF_ADDR as *mut VGABuffer) },
+            buffer: VGABuffer {
+                chars: [[VGABufferEntry {
+                    ascii_char: b' ',
+                    color: VGAColor::new(Color::White, Color::Black),
+                }; WIDTH]; HEIGHT],
+            },
+            output: unsafe { &mut *(BUF_ADDR as *mut VGABuffer) },
         }
     }
 
@@ -73,18 +80,16 @@ impl VGAWriter {
         match b {
             b'\n' => self.newline(),
             b'\r' => self.col = 0,
+            b'\t' => self.col += 4,
             b => {
                 if self.col >= WIDTH {
                     self.newline();
                 }
 
-                let addr = addr_of_mut!(self.vga_buffer.chars[self.row][self.col]);
-                unsafe {
-                    addr.write_volatile(VGABufferEntry {
-                        ascii_char: b,
-                        color: self.color,
-                    });
-                }
+                self.buffer.chars[self.row][self.col] = VGABufferEntry {
+                    ascii_char: b,
+                    color: self.color,
+                };
 
                 self.col += 1;
             }
@@ -95,9 +100,21 @@ impl VGAWriter {
         for byte in s.bytes() {
             match byte {
                 // printable ASCII byte or newline
-                0x20..=0x7e | b'\n' | b'\r' => self.write_byte(byte),
+                0x20..=0x7e | b'\n' | b'\r' | b'\t' => self.write_byte(byte),
                 // not part of printable ASCII range
                 _ => self.write_byte(0xfe),
+            }
+        }
+    }
+
+    pub fn flush(&mut self) {
+        for row in 0..HEIGHT {
+            for col in 0..WIDTH {
+                let entry = self.buffer.chars[row][col];
+                let addr = addr_of_mut!(self.output.chars[row][col]);
+                unsafe {
+                    addr.write_volatile(entry);
+                }
             }
         }
     }
@@ -105,8 +122,8 @@ impl VGAWriter {
     fn newline(&mut self) {
         for row in 0..HEIGHT - 1 {
             for col in 0..WIDTH {
-                let entry = self.vga_buffer.chars[row + 1][col];
-                self.vga_buffer.chars[row][col] = entry;
+                let entry = self.buffer.chars[row + 1][col];
+                self.buffer.chars[row][col] = entry;
             }
         }
 
@@ -121,7 +138,7 @@ impl VGAWriter {
         };
 
         for col in 0..WIDTH {
-            self.vga_buffer.chars[row][col] = blank;
+            self.buffer.chars[row][col] = blank;
         }
     }
 }
@@ -154,6 +171,10 @@ pub fn _print(args: fmt::Arguments) {
     interrupts::without_interrupts(|| WRITER.lock().write_fmt(args).unwrap());
 }
 
+pub fn flush() {
+    interrupts::without_interrupts(|| WRITER.lock().flush());
+}
+
 #[test_case]
 fn test_print() {
     println!("Printning to VGA buffer");
@@ -168,7 +189,7 @@ fn test_print_loads() {
 
 #[cfg(test)]
 fn get_char_at(row: usize, col: usize) -> char {
-    WRITER.lock().vga_buffer.chars[row][col].ascii_char as char
+    WRITER.lock().output.chars[row][col].ascii_char as char
 }
 
 #[test_case]
@@ -197,7 +218,7 @@ fn test_wrapping() {
         for (i, c) in s.chars().cycle().take(s.len() * loops).enumerate() {
             let row = start_row + i / WIDTH;
             let col = i % WIDTH;
-            assert_eq!(writer.vga_buffer.chars[row][col].ascii_char as char, c);
+            assert_eq!(writer.output.chars[row][col].ascii_char as char, c);
         }
     })
 }
