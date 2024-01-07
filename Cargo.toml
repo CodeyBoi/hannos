@@ -57,7 +57,7 @@ test-args = [
     "-display",
     "none",
 ]
-run-args = ["-drive", "format=raw,file=disk"]
+# run-args = ["-drive", "format=raw,file=disk"]
 test-success-exit-code = 33 # (0x10 << 1) | 1
 test-timeout = 300 # (in seconds)
 

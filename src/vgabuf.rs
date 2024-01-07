@@ -1,4 +1,4 @@
-use core::{fmt, ptr::addr_of_mut};
+use core::{arch::asm, fmt, ptr::addr_of_mut};
 
 use lazy_static::lazy_static;
 use spin::Mutex;
@@ -117,6 +117,11 @@ impl VGAWriter {
                 }
             }
         }
+
+        // Video interrupt to cursor to current position
+        unsafe {
+            asm!("push rbx", "mov bx, 0x0", "pop rbx", in("ax") 0x02, in("dx") self.row << 8 | self.col);
+        }
     }
 
     fn newline(&mut self) {
@@ -168,7 +173,11 @@ macro_rules! println {
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
-    interrupts::without_interrupts(|| WRITER.lock().write_fmt(args).unwrap());
+    interrupts::without_interrupts(|| {
+        let mut writer = WRITER.lock();
+        writer.write_fmt(args).unwrap();
+        writer.flush();
+    });
 }
 
 pub fn flush() {

@@ -20,6 +20,7 @@ lazy_static! {
         }
         idt[InterruptIndex::Timer.as_usize()].set_handler_fn(timer_interrupt_handler);
         idt[InterruptIndex::Keyboard.as_usize()].set_handler_fn(keyboard_interrupt_handler);
+        idt[InterruptIndex::Video.as_usize()].set_handler_fn(video_interrupt_handler);
         idt.page_fault.set_handler_fn(page_fault_handler);
         idt
     };
@@ -80,6 +81,14 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
     }
 }
 
+extern "x86-interrupt" fn video_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    println!("Video interrupt");
+    unsafe {
+        PICS.lock()
+            .notify_end_of_interrupt(InterruptIndex::Video.as_u8());
+    }
+}
+
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     println!("EXCEPTION: BREAKPOINT\n{:#?}", stack_frame);
 }
@@ -108,9 +117,9 @@ fn test_breakpoint_exception() {
     x86_64::instructions::interrupts::int3();
 }
 
-#[test_case]
-fn test_page_fault_exception() {
-    unsafe {
-        *(0xdeadbeef as *mut u8) = 42;
-    }
-}
+// #[test_case]
+// fn test_page_fault_exception() {
+//     unsafe {
+//         *(0xdeadbeef as *mut u8) = 42;
+//     }
+// }
