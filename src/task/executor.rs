@@ -51,7 +51,7 @@ impl Executor {
     }
 
     fn run_ready_tasks(&mut self) {
-        // Destructuring here lets us borrow each field mutably without the compiler complaining
+        // Destructuring here lets us use each field mutably without the borrow checker complaining
         let Self {
             tasks,
             task_queue,

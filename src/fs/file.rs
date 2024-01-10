@@ -11,13 +11,13 @@ type BlockPtr = NonZeroU32;
 type INumber = u32;
 
 const MAGIC_NUMBER: usize = 0xdeadbeef;
-const INODES_PER_BLOCK: usize = disk::BLOCK_SIZE / size_of::<File>();
+const INODES_PER_BLOCK: usize = disk::BLOCK_SIZE / size_of::<Inode>();
 const PTRS_PER_INODE: usize = 11;
 const PTRS_PER_BLOCK: usize = disk::BLOCK_SIZE / size_of::<Option<BlockPtr>>();
 const INODE_BLOCKS_START: usize = 1;
 
 #[derive(Clone)]
-pub struct File {
+pub struct Inode {
     valid: bool,
     size: usize,
     direct: [Option<BlockPtr>; 11],
@@ -30,12 +30,12 @@ pub struct FileSystem {
 }
 
 struct Superblock {
-    magic: usize,
+    magic_number: usize,
     blocks: usize,
     inode_blocks: usize,
     inodes: usize,
 }
-type InodeBlock = [File; INODES_PER_BLOCK];
+type InodeBlock = [Inode; INODES_PER_BLOCK];
 type PointerBlock = [Option<BlockPtr>; PTRS_PER_BLOCK];
 type DataBlock = [u8; disk::BLOCK_SIZE];
 
@@ -53,7 +53,7 @@ impl<'a> Block<'a> {
     }
 }
 
-impl File {
+impl Inode {
     fn new(valid: bool) -> Self {
         Self {
             valid,
@@ -68,7 +68,7 @@ impl FileSystem {
     pub fn new() -> Self {
         Self {
             superblock: Superblock {
-                magic: 0,
+                magic_number: 0,
                 blocks: 0,
                 inode_blocks: 0,
                 inodes: 0,
@@ -104,6 +104,10 @@ impl FileSystem {
         let sb = Self::read_block(0, &mut buf);
         let sb = unsafe { sb.superblock };
 
+        if sb.magic_number != MAGIC_NUMBER {
+            panic!("encountered invalid magic number while mounting drive");
+        }
+
         self.block_bitmap = (0..sb.blocks / u64::BITS as usize)
             .map(|_| 0xbbbbbbbbbbbbbbbb) // 0b1111...
             .collect();
@@ -133,7 +137,7 @@ impl FileSystem {
 
     pub fn create(&self) -> Option<INumber> {
         let inumber = self.next_free_inode()?;
-        let file = File::new(true);
+        let file = Inode::new(true);
         Self::write_inode(inumber, &file);
         Some(inumber)
     }
@@ -159,7 +163,7 @@ impl FileSystem {
         }
 
         // Overwrite the inode
-        let new_inode = File::new(false);
+        let new_inode = Inode::new(false);
         Self::write_inode(inumber, &new_inode);
     }
 
@@ -175,7 +179,7 @@ impl FileSystem {
 
         let (first_ptr_idx, first_offset) = (offset / disk::BLOCK_SIZE, offset % disk::BLOCK_SIZE);
         if first_ptr_idx < inode.direct.len() {
-            // Read the first block. This is the only block that will need an offset from the start
+            // Read the first block. This is the only block that could need an offset from the start
             bytes_read += Self::read_raw_data_many(
                 &inode.direct[first_ptr_idx..],
                 first_offset,
@@ -249,7 +253,7 @@ impl FileSystem {
         for block_idx in INODE_BLOCKS_START..self.superblock.inode_blocks + INODE_BLOCKS_START {
             let block = Self::read_block(block_idx, &mut buf);
             for (offset, inode) in unsafe { block.inodes }.iter().enumerate() {
-                let file = unsafe { (inode as *const _ as *const File).as_ref().unwrap() };
+                let file = unsafe { (inode as *const _ as *const Inode).as_ref().unwrap() };
                 if !file.valid {
                     let inumber = (block_idx - INODE_BLOCKS_START) * INODES_PER_BLOCK + offset;
                     return Some(inumber as INumber);
@@ -319,17 +323,17 @@ impl FileSystem {
         unsafe { block.pointers }
     }
 
-    fn write_inode(inumber: INumber, file: &File) {
+    fn write_inode(inumber: INumber, file: &Inode) {
         let (block, offset) = Self::calc_inode_pos(inumber);
-        let buf_ptr = file as *const _ as *const [u8; size_of::<File>()];
+        let buf_ptr = file as *const _ as *const [u8; size_of::<Inode>()];
         disk::write(block, offset, unsafe { buf_ptr.as_ref().unwrap() }).unwrap();
     }
 
-    fn read_inode(inumber: INumber) -> File {
+    fn read_inode(inumber: INumber) -> Inode {
         let (block, offset) = Self::calc_inode_pos(inumber);
-        let mut buf = [0; size_of::<File>()];
+        let mut buf = [0; size_of::<Inode>()];
         disk::read(block, offset, &mut buf).unwrap();
-        let file_ptr = &buf as *const _ as *const File;
+        let file_ptr = &buf as *const _ as *const Inode;
         unsafe { file_ptr.as_ref() }.unwrap().clone()
     }
 
